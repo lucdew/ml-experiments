@@ -2,5 +2,7 @@
 *.pb
 *.zip
 tf_tests.py
-images/*
-results/*
+**/images/*
+**/results/*
+*.pyc
+*.weights
