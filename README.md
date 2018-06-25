@@ -15,7 +15,7 @@ To install
 And the dependencies
 
 ```
-pip3 install -r requirements
+pip3 install -r requirements.txt
 ```
 
 ## darknet (53 layers) model + yolov3 detection + coco dataset
