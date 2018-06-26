@@ -6,3 +6,6 @@ tf_tests.py
 **/results/*
 *.pyc
 *.weights
+*.meta
+*.index
+*.data*

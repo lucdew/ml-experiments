@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
-import glob,os,sys
+import glob,os,sys,time
 import tensorflow as tf
 from PIL import Image, ImageDraw
 
 from yolo_v3 import yolo_v3, load_weights, detections_boxes, non_max_suppression
-from yolov3_tiny import yolo_v3_tiny
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -44,49 +43,38 @@ def convert_to_original_size(box, size, original_size):
     return list(box.reshape(-1))
 
 
-def detect_obj(file_path):
-    img = Image.open(file_path)
-    img_resized = img.resize(size=(FLAGS.size, FLAGS.size))
-
+def detect_objs(files):
     classes = load_coco_names(FLAGS.class_names)
-
-
     # placeholder for detector inputs
-    inputs = tf.placeholder(tf.float32, [None, FLAGS.size, FLAGS.size, 3])
 
-    with tf.variable_scope('detector'):
-        #detections = yolo_v3(inputs, len(classes), data_format='NCHW')
-        detections = yolo_v3(inputs, len(classes), data_format='NHWC')
-        #detections = yolo_v3_tiny(inputs, len(classes), data_format='NHWC')
-        load_ops = load_weights(tf.global_variables(scope='detector'), FLAGS.weights_file)
+    start = time.time()
+    saver = tf.train.import_meta_graph('yolov3-coco.meta')
+    graph = tf.get_default_graph()
+    #for op in graph.get_operations():
+    #   print(str(op.name))
+    inputs = graph.get_tensor_by_name("Placeholder:0")
+    op_to_restore = graph.get_tensor_by_name("outputs:0")
 
-    boxes = detections_boxes(detections)
+    print(time.time()-start)
 
-    #saver = tf.train.Saver()
     with tf.Session() as sess:
-        sess.run(load_ops)
-        #saver.save(sess, "./yolov3-coco")
-
-        detected_boxes = sess.run(boxes, feed_dict={inputs: [np.array(img_resized, dtype=np.float32)]})
-
-    filtered_boxes = non_max_suppression(detected_boxes, confidence_threshold=FLAGS.conf_threshold,
+      saver.restore(sess,tf.train.latest_checkpoint('./'))
+      for f in files:
+          start = time.time()
+          img = Image.open(f)
+          img_resized = img.resize(size=(FLAGS.size, FLAGS.size))
+          detected_boxes = sess.run(op_to_restore,{inputs:[np.array(img_resized, dtype=np.float32)]})
+          filtered_boxes = non_max_suppression(detected_boxes, confidence_threshold=FLAGS.conf_threshold,
                                          iou_threshold=FLAGS.iou_threshold)
 
-    draw_boxes(filtered_boxes, img, classes, (FLAGS.size, FLAGS.size))
+          draw_boxes(filtered_boxes, img, classes, (FLAGS.size, FLAGS.size))
+          img.save(os.path.join(FLAGS.output_dir,os.path.basename(f)))
+          print(time.time()-start)
 
-    img.save(os.path.join(FLAGS.output_dir,os.path.basename(file_path)))
-    tf.reset_default_graph()
-
-
-def main(argv=None):
-
-    if not os.path.isdir(FLAGS.output_dir):
-       os.makedirs(FLAGS.output_dir)
-
-    for f in glob.glob(FLAGS.input_dir+"/*.jpg"):
-        detect_obj(f)
-        #sys.exit(0)
 
 
 if __name__ == '__main__':
-    tf.app.run()
+    if not os.path.isdir(FLAGS.output_dir):
+       os.makedirs(FLAGS.output_dir)
+
+    detect_objs(glob.glob(FLAGS.input_dir+"/*.jpg"))
